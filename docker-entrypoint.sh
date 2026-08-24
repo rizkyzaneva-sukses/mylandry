@@ -1,24 +1,15 @@
 #!/bin/sh
 set -e
 
-echo "🚀 Starting MyLandry..."
+echo "🚀 Starting MyLaundry..."
 
-# Run database migrations
-echo "📦 Running database migrations..."
-npx prisma migrate deploy
+# Push schema to database (creates tables without migration files)
+echo "📦 Syncing database schema..."
+npx prisma db push --accept-data-loss
 
 # Seed database (only if plans table is empty)
-echo "🌱 Checking if seed is needed..."
-SEED_CHECK=$(node -e "
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-prisma.plan.count().then(c => { console.log(c); prisma.\$disconnect(); });
-" 2>/dev/null || echo "0")
-
-if [ "$SEED_CHECK" = "0" ]; then
-  echo "🌱 Seeding database..."
-  npx tsx prisma/seed.ts
-fi
+echo "🌱 Seeding database..."
+npx tsx prisma/seed.ts
 
 echo "✅ Starting Next.js server..."
 exec node server.js
