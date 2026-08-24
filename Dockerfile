@@ -17,15 +17,14 @@ RUN npm install
 
 COPY . .
 
+# Make build-args available during build
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
+
 # Generate Prisma Client
 RUN npx prisma generate
 
 # Build Next.js
-# Make build-args available as ENV during build
-ARG DATABASE_URL
-ENV DATABASE_URL=$DATABASE_URL
-ARG SESSION_PASSWORD
-ENV SESSION_PASSWORD=$SESSION_PASSWORD
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
