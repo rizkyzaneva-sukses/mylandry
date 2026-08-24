@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  # ============ PostgreSQL Database ============
+  db-postgres:
+    image: postgres:16-alpine
+    container_name: mylandry-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mylandry
+      POSTGRES_USER: mylandry
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mylandry_secret_2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mylandry -d mylandry"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============ Next.js App (Web) ============
+  web-next:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mylandry-web
+    restart: unless-stopped
+    depends_on:
+      db-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mylandry:${DB_PASSWORD:-mylandry_secret_2026}@db-postgres:5432/mylandry?schema=public
+      SESSION_PASSWORD: ${SESSION_PASSWORD:-mylandry-session-password-min-32-chars-long}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
