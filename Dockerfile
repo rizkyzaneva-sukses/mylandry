@@ -51,6 +51,9 @@ COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 # Copy production node_modules (includes pg, @prisma/adapter-pg, etc.)
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# tsx & esbuild needed by entrypoint for seed script
+COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
+COPY --from=builder /app/node_modules/esbuild ./node_modules/esbuild
 
 # Create uploads directory
 RUN mkdir -p uploads && chown -R nextjs:nodejs uploads
