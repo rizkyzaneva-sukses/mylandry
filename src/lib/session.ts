@@ -1,4 +1,6 @@
-import { getIronSession } from 'iron-session';
+import { getIronSession, type IronSession } from 'iron-session';
+import { cookies } from 'next/headers';
+import { type ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 
 export interface SessionData {
   userId?: string;
@@ -39,57 +41,34 @@ const platformSessionOptions = {
   },
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyRequest = any;
-
-async function getSessionFromRequest(req: AnyRequest, options: typeof sessionOptions) {
-  // Build a cookie header string from next/headers
-  const { cookies } = await import('next/headers');
+export async function getSession(): Promise<IronSession<SessionData>> {
   const cookieStore = await cookies();
-  const cookieHeader = cookieStore.toString();
-
-  // Create a minimal Request-like object
-  const fakeReq = new Request('http://localhost', {
-    headers: { cookie: cookieHeader },
-  });
-
-  const fakeRes = new Response();
-  const session = await getIronSession(fakeReq, fakeRes, options);
-  return { session, fakeRes };
+  return getIronSession<SessionData>(cookieStore as unknown as ReadonlyRequestCookies, sessionOptions);
 }
 
-export async function getSession(): Promise<SessionData> {
-  const { session } = await getSessionFromRequest(null, sessionOptions);
-  return session as unknown as SessionData;
+export async function getPlatformSession(): Promise<IronSession<PlatformSessionData>> {
+  const cookieStore = await cookies();
+  return getIronSession<PlatformSessionData>(cookieStore as unknown as ReadonlyRequestCookies, platformSessionOptions);
 }
 
-export async function getPlatformSession(): Promise<PlatformSessionData> {
-  const { session } = await getSessionFromRequest(null, platformSessionOptions);
-  return session as unknown as PlatformSessionData;
-}
-
-export async function setSession(data: SessionData) {
-  const { session, fakeRes } = await getSessionFromRequest(null, sessionOptions);
+export async function setSession(data: SessionData): Promise<void> {
+  const session = await getSession();
   Object.assign(session, data);
   await session.save();
-  return fakeRes;
 }
 
-export async function setPlatformSession(data: PlatformSessionData) {
-  const { session, fakeRes } = await getSessionFromRequest(null, platformSessionOptions);
+export async function setPlatformSession(data: PlatformSessionData): Promise<void> {
+  const session = await getPlatformSession();
   Object.assign(session, data);
   await session.save();
-  return fakeRes;
 }
 
-export async function destroySession() {
-  const { session, fakeRes } = await getSessionFromRequest(null, sessionOptions);
-  await session.destroy();
-  return fakeRes;
+export async function destroySession(): Promise<void> {
+  const session = await getSession();
+  session.destroy();
 }
 
-export async function destroyPlatformSession() {
-  const { session, fakeRes } = await getSessionFromRequest(null, platformSessionOptions);
-  await session.destroy();
-  return fakeRes;
+export async function destroyPlatformSession(): Promise<void> {
+  const session = await getPlatformSession();
+  session.destroy();
 }
