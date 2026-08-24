@@ -47,3 +47,13 @@ export function apiError(message: string, status = 400, errors?: unknown) {
     { status }
   );
 }
+
+/** Format number as Rupiah currency */
+export function formatRupiah(amount: number): string {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
