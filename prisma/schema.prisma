@@ -1,0 +1,423 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  OWNER
+  ADMIN
+  KASIR
+}
+
+enum PlatformRole {
+  SUPERADMIN
+}
+
+enum OrderStatus {
+  DITERIMA
+  DIPROSES
+  SIAP_DIAMBIL
+  SELESAI
+  DIBATALKAN
+}
+
+enum PaymentMethod {
+  TUNAI
+  TRANSFER
+  QRIS
+  LAINNYA
+}
+
+enum PlanCode {
+  FREE
+  PRO
+  CUSTOM
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  AKTIF
+  GRACE
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
+enum OutboxStatus {
+  PENDING
+  TERKIRIM
+  GAGAL
+}
+
+enum FeeType {
+  PERSEN
+  NOMINAL
+}
+
+// ============ PLATFORM MODELS ============
+
+model Tenant {
+  id               String             @id @default(uuid())
+  nama             String
+  domain           String?            @unique
+  logoUrl          String?
+  status           SubscriptionStatus @default(TRIAL)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  users            User[]
+  outlets          Outlet[]
+  layanan          Layanan[]
+  tingkatLayanan   TingkatLayanan[]
+  pelanggan        Pelanggan[]
+  orders           Order[]
+  pembayaran       Pembayaran[]
+  subscriptions    Subscription[]
+  invoices         Invoice[]
+  kuponRedemptions KuponRedemption[]
+  auditLogs        AuditLog[]
+
+  @@map("tenants")
+}
+
+model PlatformUser {
+  id           String       @id @default(uuid())
+  username     String       @unique
+  passwordHash String
+  nama         String
+  role         PlatformRole @default(SUPERADMIN)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  approvedInvoices Invoice[] @relation("ApprovedBy")
+
+  @@map("platform_users")
+}
+
+// ============ TENANT MODELS ============
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  username     String
+  passwordHash String
+  nama         String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ordersBatal  Order[]      @relation("DibatalkanOleh")
+  pembayaran   Pembayaran[]
+  orderLogs    OrderLog[]
+
+  @@unique([tenantId, username])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Outlet {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nama      String
+  alamat    String?
+  telepon   String?
+  isAktif   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([tenantId])
+  @@map("outlets")
+}
+
+model Layanan {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nama      String
+  harga     Int
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([tenantId])
+  @@map("layanan")
+}
+
+model TingkatLayanan {
+  id         String   @id @default(uuid())
+  tenantId   String
+  nama       String
+  tipeBiaya  FeeType  @default(NOMINAL)
+  nilaiBiaya Int      @default(0)
+  isAktif    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([tenantId])
+  @@map("tingkat_layanan")
+}
+
+model Pelanggan {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nama      String
+  nomorWa   String
+  alamat    String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([tenantId])
+  @@map("pelanggan")
+}
+
+model Order {
+  id               String      @id @default(uuid())
+  tenantId         String
+  nomorOrder       String
+  outletId         String
+  pelangganId      String
+  tingkatLayananId String
+  status           OrderStatus @default(DITERIMA)
+  subtotal         Int
+  biayaTingkat     Int
+  biayaAntarJemput Int         @default(0)
+  diskon           Int         @default(0)
+  total            Int
+  sisa             Int
+  catatanBatal     String?
+  dibatalkanOlehId String?
+  dibatalkanAt     DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outlet         Outlet         @relation(fields: [outletId], references: [id])
+  pelanggan      Pelanggan      @relation(fields: [pelangganId], references: [id])
+  tingkatLayanan TingkatLayanan @relation(fields: [tingkatLayananId], references: [id])
+  dibatalkanOleh User?          @relation("DibatalkanOleh", fields: [dibatalkanOlehId], references: [id])
+
+  items      OrderItem[]
+  pembayaran Pembayaran[]
+  logs       OrderLog[]
+
+  @@unique([tenantId, nomorOrder])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String  @id @default(uuid())
+  orderId             String
+  layananId           String
+  namaLayananSnapshot String
+  hargaSnapshot       Int
+  qty                 Int
+  catatanKondisi      String?
+  subtotal            Int
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  layanan Layanan @relation(fields: [layananId], references: [id])
+
+  @@map("order_items")
+}
+
+model Pembayaran {
+  id          String        @id @default(uuid())
+  tenantId    String
+  orderId     String
+  kasirUserId String
+  nominal     Int
+  metode      PaymentMethod
+  isRefund    Boolean       @default(false)
+  dibayarAt   DateTime      @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kasir  User   @relation(fields: [kasirUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("pembayaran")
+}
+
+model OrderLog {
+  id               String       @id @default(uuid())
+  orderId          String
+  userId           String
+  statusSebelumnya OrderStatus?
+  statusBaru       OrderStatus
+  createdAt        DateTime     @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@map("order_logs")
+}
+
+// ============ SUBSCRIPTION & BILLING ============
+
+model Plan {
+  id               String   @id @default(uuid())
+  kode             PlanCode @unique
+  nama             String
+  hargaPerBulan1   Int
+  hargaPerBulan3   Int
+  hargaPerBulan6   Int
+  hargaPerBulan12  Int
+  maxOutlet        Int
+  maxOrderPerBulan Int
+  hasWaNotif       Boolean  @default(false)
+  hasExport        Boolean  @default(false)
+  hasLaporanBulan  Boolean  @default(false)
+  logoStrukAllowed Boolean  @default(false)
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id              String             @id @default(uuid())
+  tenantId        String
+  planId          String
+  status          SubscriptionStatus @default(TRIAL)
+  termBulan       Int                @default(1)
+  berlakuSampai   DateTime
+  graceSampai     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  @@index([tenantId])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id                         String        @id @default(uuid())
+  tenantId                   String
+  nomorInvoice               String        @unique
+  total                      Int
+  buktiTransferUrl           String?
+  status                     InvoiceStatus @default(PENDING)
+  approvedByPlatformUserId   String?
+  approvedAt                 DateTime?
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  approvedByPlatform PlatformUser? @relation("ApprovedBy", fields: [approvedByPlatformUserId], references: [id])
+
+  @@index([tenantId])
+  @@map("invoices")
+}
+
+// ============ KUPON ============
+
+model Kupon {
+  id             String    @id @default(uuid())
+  kode           String    @unique
+  tipe           FeeType
+  nilai          Int
+  planScope      PlanCode?
+  termScope      Int?
+  maxRedemption  Int?
+  terpakai       Int       @default(0)
+  berlakuSampai  DateTime?
+  isWakaf        Boolean   @default(false)
+  isAktif        Boolean   @default(true)
+
+  redemptions KuponRedemption[]
+
+  @@map("kupon")
+}
+
+model KuponRedemption {
+  id              String   @id @default(uuid())
+  kuponId         String
+  tenantId        String
+  nominalPotongan Int
+  redeemedAt      DateTime @default(now())
+
+  kupon  Kupon  @relation(fields: [kuponId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("kupon_redemptions")
+}
+
+// ============ OTP & WHATSAPP ============
+
+model OtpVerification {
+  id              String   @id @default(uuid())
+  nomorWa         String   @unique
+  otpHash         String
+  expiresAt       DateTime
+  attempts        Int      @default(0)
+  lastSentAt      DateTime @default(now())
+  hourlySentCount Int      @default(1)
+  isVerified      Boolean  @default(false)
+  namaLaundry     String?
+  namaPemilik     String?
+  username        String?
+  passwordHash    String?
+  kodeKupon       String?
+  createdAt       DateTime @default(now())
+
+  @@map("otp_verifications")
+}
+
+model PesanWaOutbox {
+  id          String       @id @default(uuid())
+  tenantId    String?
+  nomorTujuan String
+  pesan       String
+  tipe        String       @default("GENERAL")
+  status      OutboxStatus @default(PENDING)
+  retryCount  Int          @default(0)
+  nextRetryAt DateTime     @default(now())
+  errorLog    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status, nextRetryAt])
+  @@map("pesan_wa_outbox")
+}
+
+// ============ AUDIT ============
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  aksi      String
+  detail    String
+  timestamp DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("audit_logs")
+}

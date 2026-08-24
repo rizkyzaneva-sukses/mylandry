@@ -1,0 +1,22 @@
+{
+  "name": "MyLandry - LAUNDRY GAMPANGIN",
+  "short_name": "MyLandry",
+  "description": "SaaS operasional laundry satuan",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#047857",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
